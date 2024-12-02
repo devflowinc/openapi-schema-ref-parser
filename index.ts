@@ -1,6 +1,10 @@
 import refRes from "@json-schema-tools/reference-resolver";
 
-const expandRefs = async (schema: any, maxEvalsPerObj: number = 100) => {
+const expandRefs = async (
+  schema: any,
+  maxEvalsPerObj: number = 100,
+  logging: boolean = true
+) => {
   const recExpandRefs = async (obj: any, visited = new Map()): Promise<any> => {
     // Handle null/undefined
     if (!obj) return obj;
@@ -28,11 +32,21 @@ const expandRefs = async (schema: any, maxEvalsPerObj: number = 100) => {
           try {
             resolved = await refRes.resolve(value, schema);
           } catch (e) {
-            console.error(`Failed to resolve reference: ${value}`, key, value);
+            if (logging) {
+              console.error(
+                `Failed to resolve reference: ${value}`,
+                key,
+                value
+              );
+            }
           }
-          expanded = await recExpandRefs(resolved, visited);
+
+          if (typeof resolved === "object") {
+            expanded = await recExpandRefs(resolved, visited);
+          } else {
+            expanded[key] = resolved;
+          }
         } else if (typeof value === "object") {
-          // Recursively expand nested objects/arrays
           expanded[key] = await recExpandRefs(value, visited);
         } else {
           // Copy primitive values as-is
@@ -47,7 +61,14 @@ const expandRefs = async (schema: any, maxEvalsPerObj: number = 100) => {
     return obj;
   };
 
-  return await recExpandRefs(schema);
+  const components = schema.components || schema.components;
+  let schemaOnly = schema;
+  if (components) {
+    schemaOnly = { ...schema };
+    delete schemaOnly.components;
+  }
+
+  return await recExpandRefs(schemaOnly);
 };
 
 export default expandRefs;
